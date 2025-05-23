@@ -575,6 +575,7 @@ def share_event(
 
     Shares an event with multiple users by assigning them roles (owner, editor, or viewer).
     The current user must be the owner of the event.
+    If a user already has a permission for the event, their role will be updated.
 
     Path Parameters:
     - event_id: ID of the event to share
@@ -663,8 +664,10 @@ def share_event(
     Notes:
     - role must be one of: "owner", "editor", "viewer"
     - The users being shared with must exist in the system
-    - Duplicate user_ids are not allowed
+    - Duplicate user_ids are not allowed in the request
     - At least one user must be provided
+    - If a user already has a permission for the event, their role will be updated
+    - Each user can have only one role per event
     """
     event = crud_event.event.get(db=db, id=event_id)
     if not event:
