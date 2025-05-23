@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field, field_validator, model_validator
+import json
 
 
 class RecurrencePattern(BaseModel):
@@ -34,6 +35,13 @@ class RecurrencePattern(BaseModel):
             data['end_date'] = data['end_date'].isoformat()
         return data
 
+    @classmethod
+    def model_validate_json(cls, json_data: str) -> 'RecurrencePattern':
+        data = json.loads(json_data)
+        if data.get('end_date'):
+            data['end_date'] = datetime.fromisoformat(data['end_date'])
+        return cls.model_validate(data)
+
 
 class EventBase(BaseModel):
     title: str
@@ -51,11 +59,6 @@ class EventBase(BaseModel):
             self.start_time = self.start_time.replace(tzinfo=timezone.utc)
         if self.end_time.tzinfo is None:
             self.end_time = self.end_time.replace(tzinfo=timezone.utc)
-
-        # Validate start time is in future
-        current_time = datetime.now(timezone.utc)
-        if self.start_time <= current_time:
-            raise ValueError('start_time must be in the future')
 
         # Validate end time is after start time
         if self.end_time <= self.start_time:
@@ -107,13 +110,54 @@ class EventBase(BaseModel):
 
 
 class EventCreate(EventBase):
-    pass
+    @model_validator(mode='after')
+    def validate_start_time_future(self) -> 'EventCreate':
+        # Only validate start time is in future for new events
+        current_time = datetime.now(timezone.utc)
+        if self.start_time <= current_time:
+            raise ValueError('start_time must be in the future')
+        return self
 
 
-class EventUpdate(EventBase):
+class EventUpdate(BaseModel):
     title: Optional[str] = None
+    description: Optional[str] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
+    location: Optional[str] = None
+    is_recurring: Optional[bool] = None
+    recurrence_pattern: Optional[RecurrencePattern] = None
+
+    @model_validator(mode='after')
+    def validate_dates(self) -> 'EventUpdate':
+        # Only validate if both start_time and end_time are provided
+        if self.start_time is not None and self.end_time is not None:
+            # Convert naive datetimes to UTC
+            if self.start_time.tzinfo is None:
+                self.start_time = self.start_time.replace(tzinfo=timezone.utc)
+            if self.end_time.tzinfo is None:
+                self.end_time = self.end_time.replace(tzinfo=timezone.utc)
+
+            # Validate end time is after start time
+            if self.end_time <= self.start_time:
+                raise ValueError('end_time must be after start_time')
+
+        # Validate recurrence pattern if present
+        if self.is_recurring and self.recurrence_pattern:
+            if self.recurrence_pattern.end_date:
+                if self.recurrence_pattern.end_date.tzinfo is None:
+                    self.recurrence_pattern.end_date = self.recurrence_pattern.end_date.replace(tzinfo=timezone.utc)
+                if self.start_time and self.recurrence_pattern.end_date <= self.start_time:
+                    raise ValueError('Recurrence end_date must be after the event start_time')
+
+        return self
+
+    @field_validator('is_recurring', mode='before')
+    @classmethod
+    def validate_is_recurring(cls, v):
+        if isinstance(v, str):
+            return v.lower() == 'true'
+        return bool(v) if v is not None else None
 
 
 class EventPermissionBase(BaseModel):

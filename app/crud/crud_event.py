@@ -93,17 +93,36 @@ class CRUDEvent(CRUDBase[Event, EventCreate, EventUpdate]):
         # Get the previous version's data for comparison
         previous_data = latest_version.data if latest_version else {}
         
-        # Calculate changed fields
+        # Define essential fields to track
+        essential_fields = {
+            "title", "description", "start_time", "end_time", 
+            "location", "is_recurring", "recurrence_pattern"
+        }
+        
+        # Calculate changed fields, only for essential fields
         changed_fields = {}
-        for key, value in data.items():
-            if key not in previous_data or previous_data[key] != value:
-                changed_fields[key] = {
-                    "old": previous_data.get(key),
-                    "new": value
-                }
+        for key in essential_fields:
+            if key in data:
+                if key not in previous_data or previous_data[key] != data[key]:
+                    changed_fields[key] = {
+                        "old": previous_data.get(key),
+                        "new": data[key]
+                    }
+        
+        # Only store essential event data
+        essential_data = {
+            "title": data.get("title"),
+            "description": data.get("description"),
+            "start_time": data.get("start_time"),
+            "end_time": data.get("end_time"),
+            "location": data.get("location"),
+            "is_recurring": data.get("is_recurring"),
+            "recurrence_pattern": data.get("recurrence_pattern")
+        }
         
         # Serialize datetimes in data for JSON storage
-        version_data = serialize_datetimes(data)
+        version_data = serialize_datetimes(essential_data)
+        changed_fields = serialize_datetimes(changed_fields)
         
         version = EventVersion(
             event_id=event_id,
