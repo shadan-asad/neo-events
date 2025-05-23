@@ -60,7 +60,7 @@ class EventBase(BaseModel):
         if self.end_time.tzinfo is None:
             self.end_time = self.end_time.replace(tzinfo=timezone.utc)
 
-        # Validate end time is after start time
+        # Only validate end time is after start time
         if self.end_time <= self.start_time:
             raise ValueError('end_time must be after start_time')
 
@@ -254,4 +254,33 @@ class EventCreateResponse(EventBase):
 class EventDiff(BaseModel):
     version1: int
     version2: int
-    changes: Dict[str, Dict[str, Any]] 
+    changes: Dict[str, Dict[str, Any]]
+
+
+class EventList(BaseModel):
+    id: int
+    title: str
+    description: Optional[str] = None
+    start_time: datetime
+    end_time: datetime
+    location: Optional[str] = None
+    is_recurring: bool = False
+    recurrence_pattern: Optional[RecurrencePattern] = None
+    owner_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    permissions: List[EventPermission] = []
+
+    class Config:
+        from_attributes = True
+
+    def model_dump(self, **kwargs) -> Dict[str, Any]:
+        data = super().model_dump(**kwargs)
+        # Convert datetime fields to ISO format
+        if data.get('start_time'):
+            data['start_time'] = data['start_time'].isoformat()
+        if data.get('end_time'):
+            data['end_time'] = data['end_time'].isoformat()
+        if data.get('recurrence_pattern'):
+            data['recurrence_pattern'] = self.recurrence_pattern.model_dump()
+        return data 

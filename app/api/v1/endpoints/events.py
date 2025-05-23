@@ -14,7 +14,8 @@ from app.schemas.event import (
     EventVersion,
     EventDiff,
     EventCreateResponse,
-    EventShareRequest
+    EventShareRequest,
+    EventList
 )
 from app.schemas.user import User
 
@@ -198,7 +199,7 @@ def create_event(
         )
 
 
-@router.get("", response_model=List[Event])
+@router.get("", response_model=List[EventList])
 def read_events(
     db: Session = Depends(deps.get_db),
     skip: int = 0,
@@ -210,6 +211,7 @@ def read_events(
 
     Returns a list of events that the current user has access to (either as owner or through permissions).
     Results are paginated using skip and limit parameters.
+    The response includes all event data except for version history.
 
     Query Parameters:
     - skip: Number of records to skip (default: 0)
@@ -226,6 +228,7 @@ def read_events(
             "end_time": "2024-03-20T11:00:00Z",
             "location": "Conference Room A",
             "is_recurring": false,
+            "recurrence_pattern": null,
             "owner_id": 1,
             "created_at": "2024-03-20T09:00:00Z",
             "updated_at": "2024-03-20T09:00:00Z",
@@ -243,11 +246,25 @@ def read_events(
     ]
     ```
 
+    Notes:
+    - All datetime fields are returned in ISO 8601 format with UTC timezone
+    - The response does not include version history
+    - Events are returned in chronological order by creation date
+    - Only events that the user has permission to view are included
+    - For recurring events, the recurrence_pattern will contain the frequency, interval, and other recurrence settings
+
     Error Responses:
     1. Invalid pagination parameters:
     ```json
     {
         "detail": "Limit must be between 1 and 100"
+    }
+    ```
+
+    2. Unauthorized access:
+    ```json
+    {
+        "detail": "Not authenticated"
     }
     ```
     """

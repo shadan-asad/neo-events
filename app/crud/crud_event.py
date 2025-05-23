@@ -63,7 +63,7 @@ class CRUDEvent(CRUDBase[Event, EventCreate, EventUpdate]):
     ) -> List[Event]:
         return (
             db.query(self.model)
-            .join(EventPermission)
+            .outerjoin(EventPermission)
             .filter(
                 or_(
                     Event.owner_id == user_id,
@@ -73,6 +73,7 @@ class CRUDEvent(CRUDBase[Event, EventCreate, EventUpdate]):
                     )
                 )
             )
+            .distinct()  # Add distinct to avoid duplicates
             .offset(skip)
             .limit(limit)
             .all()
