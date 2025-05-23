@@ -11,6 +11,7 @@ from app.schemas.event import (
     EventUpdate,
     EventPermission,
     EventPermissionCreate,
+    EventPermissionUpdate,
     EventVersion,
     EventDiff,
     EventCreateResponse,
@@ -1231,4 +1232,99 @@ def create_events_batch(
         events=batch_in.events,
         owner_id=current_user.id
     )
-    return result 
+    return result
+
+
+@router.put("/{event_id}/permissions/{user_id}", response_model=EventPermission)
+def update_event_permission(
+    *,
+    db: Session = Depends(deps.get_db),
+    event_id: int,
+    user_id: int,
+    permission_in: EventPermissionUpdate,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Update user's permission for an event.
+
+    Updates a user's permission role for an event.
+    The current user must be the owner of the event.
+
+    Path Parameters:
+    - event_id: ID of the event
+    - user_id: ID of the user whose permission to update
+
+    Request Body Example:
+    ```json
+    {
+        "role": "editor"
+    }
+    ```
+
+    Response Example:
+    ```json
+    {
+        "id": 1,
+        "user_id": 2,
+        "role": "editor",
+        "event_id": 1,
+        "created_at": "2024-03-20T09:00:00Z",
+        "updated_at": "2024-03-20T09:00:00Z"
+    }
+    ```
+
+    Error Responses:
+    1. Event not found:
+    ```json
+    {
+        "detail": "Event not found"
+    }
+    ```
+
+    2. Insufficient permissions:
+    ```json
+    {
+        "detail": "Not enough permissions"
+    }
+    ```
+
+    3. Permission not found:
+    ```json
+    {
+        "detail": "Permission not found"
+    }
+    ```
+
+    4. Invalid role:
+    ```json
+    {
+        "detail": "Role must be one of: owner, editor, viewer"
+    }
+    ```
+
+    Notes:
+    - role must be one of: "owner", "editor", "viewer"
+    - The user must already have a permission for the event
+    - Only the event owner can update permissions
+    """
+    event = crud_event.event.get(db=db, id=event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not crud_event.event.check_permission(
+        db=db, event_id=event_id, user_id=current_user.id, required_role=UserRole.OWNER
+    ):
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    # Convert the role string to lowercase and create the UserRole enum
+    role_str = permission_in.role.lower()
+    role = UserRole(role_str)  # Create enum with lowercase value
+    
+    permission = crud_event.event.update_permission(
+        db=db,
+        event_id=event_id,
+        user_id=user_id,
+        role=role
+    )
+    if not permission:
+        raise HTTPException(status_code=404, detail="Permission not found")
+    return permission 

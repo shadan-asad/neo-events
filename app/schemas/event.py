@@ -176,6 +176,17 @@ class EventPermissionCreate(EventPermissionBase):
     pass
 
 
+class EventPermissionUpdate(BaseModel):
+    role: Literal["owner", "editor", "viewer"]
+
+    @field_validator('role')
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        if v not in ["owner", "editor", "viewer"]:
+            raise ValueError('Role must be one of: owner, editor, viewer')
+        return v
+
+
 class EventPermission(EventPermissionBase):
     id: int
     event_id: int

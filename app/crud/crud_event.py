@@ -198,6 +198,26 @@ class CRUDEvent(CRUDBase[Event, EventCreate, EventUpdate]):
             db.commit()
         return permission
 
+    def update_permission(
+        self, db: Session, *, event_id: int, user_id: int, role: UserRole
+    ) -> Optional[EventPermission]:
+        permission = (
+            db.query(EventPermission)
+            .filter(
+                and_(
+                    EventPermission.event_id == event_id,
+                    EventPermission.user_id == user_id
+                )
+            )
+            .first()
+        )
+        if permission:
+            permission.role = role
+            db.add(permission)
+            db.commit()
+            db.refresh(permission)
+        return permission
+
     def check_permission(
         self, db: Session, *, event_id: int, user_id: int, required_role: UserRole
     ) -> bool:
