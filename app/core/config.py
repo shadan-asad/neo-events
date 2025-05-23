@@ -1,51 +1,50 @@
-from typing import Optional
+from typing import Any, Dict, Optional, Union, List
 from pydantic_settings import BaseSettings
-from pydantic import PostgresDsn, field_validator, Field
+from pydantic import PostgresDsn, validator
+from pydantic.networks import AnyHttpUrl
+
 
 class Settings(BaseSettings):
-    """
-    Application settings loaded from environment variables or .env file.
-    All sensitive/configurable values should be set via environment variables.
-    """
-    PROJECT_NAME: str = Field("Neo Events", env="PROJECT_NAME")
-    VERSION: str = Field("1.0.0", env="VERSION")
-    API_V1_STR: str = Field("/api", env="API_V1_STR")
+    API_V1_STR: str = "/api/v1"
+    SECRET_KEY: str
+    VERSION: str = "1.0.0"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30  # 30 days
+    ALGORITHM: str = "HS256"
+    
+    # BACKEND_CORS_ORIGINS is a JSON-formatted list of origins
+    # e.g: '["http://localhost", "http://localhost:4200", "http://localhost:3000"]'
+    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
 
-    # Security
-    SECRET_KEY: str = Field(..., env="SECRET_KEY")  # Must be set in env
-    ALGORITHM: str = Field("HS256", env="ALGORITHM")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
-    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(7, env="REFRESH_TOKEN_EXPIRE_DAYS")
+    @validator("BACKEND_CORS_ORIGINS", pre=True)
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",")]
+        elif isinstance(v, (list, str)):
+            return v
+        raise ValueError(v)
 
-    # Database
-    POSTGRES_SERVER: str = Field(..., env="POSTGRES_SERVER")
-    POSTGRES_USER: str = Field(..., env="POSTGRES_USER")
-    POSTGRES_PASSWORD: str = Field(..., env="POSTGRES_PASSWORD")
-    POSTGRES_DB: str = Field(..., env="POSTGRES_DB")
-    SQLALCHEMY_DATABASE_URI: Optional[str] = Field(None, env="DATABASE_URL")
+    PROJECT_NAME: str = "Event Management System"
+    
+    POSTGRES_SERVER: str
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_DB: str
+    SQLALCHEMY_DATABASE_URI: Optional[str] = None
 
-    @field_validator("SQLALCHEMY_DATABASE_URI", mode="before")
-    @classmethod
-    def assemble_db_connection(cls, v: Optional[str], info) -> str:
+    @validator("SQLALCHEMY_DATABASE_URI", pre=True)
+    def assemble_db_connection(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
         if isinstance(v, str) and v:
             return v
-        
-        # Build from components
-        user = info.data.get("POSTGRES_USER")
-        password = info.data.get("POSTGRES_PASSWORD")
-        server = info.data.get("POSTGRES_SERVER")
-        db = info.data.get("POSTGRES_DB")
-        
-        if not all([user, password, server, db]):
-            raise ValueError("Database credentials are not fully set in environment variables.")
-        
+        user = values.get("POSTGRES_USER")
+        password = values.get("POSTGRES_PASSWORD")
+        server = values.get("POSTGRES_SERVER")
+        db = values.get("POSTGRES_DB")
         return f"postgresql://{user}:{password}@{server}/{db}"
-
-    # Redis
-    REDIS_URL: str = Field("redis://localhost:6379", env="REDIS_URL")
 
     class Config:
         case_sensitive = True
         env_file = ".env"
+
 
 settings = Settings() 

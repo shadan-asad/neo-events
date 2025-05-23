@@ -145,6 +145,13 @@ def create_event(
     }
     ```
 
+    3. Invalid time range:
+    ```json
+    {
+        "detail": "End time must be after start time"
+    }
+    ```
+
     Notes:
     - For recurring events, `is_recurring` must be true and `recurrence_pattern` must be provided
     - For weekly recurrence, `days_of_week` is required (0-6 for Sunday-Saturday)
@@ -152,24 +159,42 @@ def create_event(
     - For yearly recurrence, `month_of_year` is required (1-12)
     - `interval` defaults to 1 if not provided
     - `end_date` is optional for all recurrence types
+    - `end_time` must be after `start_time`
     """
-    # Check for conflicts
-    conflicts = crud_event.event.check_conflicts(
-        db,
-        event_id=0,  # New event
-        start_time=event_in.start_time,
-        end_time=event_in.end_time
-    )
-    if conflicts:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Event conflicts with existing events"
+    try:
+        # Check for conflicts
+        conflicts = crud_event.event.check_conflicts(
+            db,
+            event_id=0,  # New event
+            start_time=event_in.start_time,
+            end_time=event_in.end_time
         )
-    
-    event = crud_event.event.create_with_owner(
-        db=db, obj_in=event_in, owner_id=current_user.id
-    )
-    return event
+        if conflicts:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Event conflicts with existing events"
+            )
+        
+        event = crud_event.event.create_with_owner(
+            db=db, obj_in=event_in, owner_id=current_user.id
+        )
+        return event
+    except ValueError as e:
+        error_message = str(e)
+        if "end_time must be after start_time" in error_message:
+            error_message = "End time must be after start time"
+        elif "Recurrence pattern is required" in error_message:
+            error_message = "Recurrence pattern is required when is_recurring is true"
+        elif "days_of_week is required" in error_message:
+            error_message = "Days of week are required for weekly recurrence"
+        elif "day_of_month is required" in error_message:
+            error_message = "Day of month is required for monthly recurrence"
+        elif "month_of_year is required" in error_message:
+            error_message = "Month of year is required for yearly recurrence"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_message
+        )
 
 
 @router.get("", response_model=List[Event])

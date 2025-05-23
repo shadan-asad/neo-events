@@ -49,7 +49,8 @@ def register(
         },
         "tokens": {
             "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-            "token_type": "bearer"
+            "token_type": "bearer",
+            "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
         }
     }
     ```
@@ -149,7 +150,8 @@ def login(
         },
         "tokens": {
             "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-            "token_type": "bearer"
+            "token_type": "bearer",
+            "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
         }
     }
     ```
@@ -301,7 +303,8 @@ def refresh_token(
         },
         "tokens": {
             "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-            "token_type": "bearer"
+            "token_type": "bearer",
+            "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
         }
     }
     ```

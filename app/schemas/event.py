@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any, Literal
-from datetime import datetime
-from pydantic import BaseModel, Field, field_validator
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class RecurrencePattern(BaseModel):
@@ -10,6 +10,29 @@ class RecurrencePattern(BaseModel):
     days_of_week: Optional[List[int]] = None  # 0-6 for Sunday-Saturday, used for weekly recurrence
     day_of_month: Optional[int] = Field(None, ge=1, le=31)  # Used for monthly recurrence
     month_of_year: Optional[int] = Field(None, ge=1, le=12)  # Used for yearly recurrence
+
+    @field_validator('end_date')
+    @classmethod
+    def validate_end_date(cls, v: Optional[datetime], info) -> Optional[datetime]:
+        if v is not None:
+            # Convert naive datetime to UTC if it's naive
+            if v.tzinfo is None:
+                v = v.replace(tzinfo=timezone.utc)
+            
+            # Get the event's start time from the parent model
+            if 'start_time' in info.data:
+                start_time = info.data['start_time']
+                if start_time.tzinfo is None:
+                    start_time = start_time.replace(tzinfo=timezone.utc)
+                if v <= start_time:
+                    raise ValueError('Recurrence end_date must be after the event start_time')
+        return v
+
+    def model_dump(self, **kwargs) -> Dict[str, Any]:
+        data = super().model_dump(**kwargs)
+        if data.get('end_date'):
+            data['end_date'] = data['end_date'].isoformat()
+        return data
 
 
 class EventBase(BaseModel):
@@ -21,6 +44,33 @@ class EventBase(BaseModel):
     is_recurring: bool = False
     recurrence_pattern: Optional[RecurrencePattern] = None
 
+    @model_validator(mode='after')
+    def validate_dates(self) -> 'EventBase':
+        # Convert naive datetimes to UTC
+        if self.start_time.tzinfo is None:
+            self.start_time = self.start_time.replace(tzinfo=timezone.utc)
+        if self.end_time.tzinfo is None:
+            self.end_time = self.end_time.replace(tzinfo=timezone.utc)
+
+        # Validate start time is in future
+        current_time = datetime.now(timezone.utc)
+        if self.start_time <= current_time:
+            raise ValueError('start_time must be in the future')
+
+        # Validate end time is after start time
+        if self.end_time <= self.start_time:
+            raise ValueError('end_time must be after start_time')
+
+        # Validate recurrence pattern if present
+        if self.is_recurring and self.recurrence_pattern:
+            if self.recurrence_pattern.end_date:
+                if self.recurrence_pattern.end_date.tzinfo is None:
+                    self.recurrence_pattern.end_date = self.recurrence_pattern.end_date.replace(tzinfo=timezone.utc)
+                if self.recurrence_pattern.end_date <= self.start_time:
+                    raise ValueError('Recurrence end_date must be after the event start_time')
+
+        return self
+
     @field_validator('is_recurring', mode='before')
     @classmethod
     def validate_is_recurring(cls, v):
@@ -30,10 +80,10 @@ class EventBase(BaseModel):
 
     @field_validator('recurrence_pattern')
     @classmethod
-    def validate_recurrence_pattern(cls, v, values):
-        if values.get('is_recurring') and not v:
+    def validate_recurrence_pattern(cls, v, info):
+        if info.data.get('is_recurring') and not v:
             raise ValueError('Recurrence pattern is required when is_recurring is true')
-        if not values.get('is_recurring') and v:
+        if not info.data.get('is_recurring') and v:
             raise ValueError('Recurrence pattern should not be provided when is_recurring is false')
         if v:
             if v.frequency == 'weekly' and not v.days_of_week:
@@ -43,6 +93,17 @@ class EventBase(BaseModel):
             if v.frequency == 'yearly' and not v.month_of_year:
                 raise ValueError('month_of_year is required for yearly recurrence')
         return v
+
+    def model_dump(self, **kwargs) -> Dict[str, Any]:
+        data = super().model_dump(**kwargs)
+        # Convert datetime fields to ISO format
+        if data.get('start_time'):
+            data['start_time'] = data['start_time'].isoformat()
+        if data.get('end_time'):
+            data['end_time'] = data['end_time'].isoformat()
+        if data.get('recurrence_pattern'):
+            data['recurrence_pattern'] = self.recurrence_pattern.model_dump()
+        return data
 
 
 class EventCreate(EventBase):

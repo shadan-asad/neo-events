@@ -1,6 +1,6 @@
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 class UserBase(BaseModel):
@@ -55,9 +55,7 @@ class TokenPayload(BaseModel):
 
 class UserWithToken(BaseModel):
     user: User
-    access_token: str
-    token_type: str
-    refresh_token: str
+    tokens: Token
 
 
 class LoginRequest(BaseModel):
@@ -65,8 +63,9 @@ class LoginRequest(BaseModel):
     username: Optional[str] = None
     password: str
 
-    @validator('email', 'username')
-    def validate_credentials(cls, v, values, **kwargs):
-        if not v and not values.get('username' if kwargs['field'].name == 'email' else 'email'):
+    @field_validator('email', 'username')
+    @classmethod
+    def validate_credentials(cls, v: Optional[str], info) -> Optional[str]:
+        if not v and not info.data.get('username' if info.field_name == 'email' else 'email'):
             raise ValueError('Either email or username must be provided')
         return v 
