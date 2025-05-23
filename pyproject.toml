@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neo-events"
+version = "0.1.0"
+description = "Event scheduling application with collaborative editing features"
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi==0.104.1",
+    "uvicorn==0.24.0",
+    "sqlalchemy==2.0.23",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.0.0",
+    "python-jose[cryptography]==3.3.0",
+    "passlib[bcrypt]==1.7.4",
+    "python-multipart==0.0.6",
+    "alembic==1.12.1",
+    "psycopg2-binary==2.9.9",
+    "python-dotenv==1.0.0",
+    "msgpack==1.0.7",
+    "redis==5.0.1",
+    "email-validator>=2.0.0",
+    "httpx==0.24.1",
+    "starlette==0.27.0",
+    "pytest>=8.3.5"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"] 
