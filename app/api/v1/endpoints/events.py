@@ -1330,4 +1330,102 @@ def update_event_permission(
     )
     if not permission:
         raise HTTPException(status_code=404, detail="Permission not found")
-    return permission 
+    return permission
+
+
+@router.post("/{event_id}/rollback/{version_id}", response_model=Event)
+def rollback_event(
+    *,
+    db: Session = Depends(deps.get_db),
+    event_id: int,
+    version_id: int,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Rollback event to a specific version.
+
+    Rolls back an event to a previous version. The current user must have editor permission.
+    A new version is created to track the rollback operation.
+
+    Path Parameters:
+    - event_id: ID of the event to rollback
+    - version_id: Version number to rollback to
+
+    Response Example:
+    ```json
+    {
+        "id": 1,
+        "title": "Original Title",
+        "description": "Original description",
+        "start_time": "2024-03-20T10:00:00Z",
+        "end_time": "2024-03-20T11:00:00Z",
+        "location": "Conference Room A",
+        "is_recurring": false,
+        "owner_id": 1,
+        "created_at": "2024-03-20T09:00:00Z",
+        "updated_at": "2024-03-20T09:00:00Z",
+        "permissions": [
+            {
+                "id": 1,
+                "user_id": 2,
+                "role": "editor",
+                "event_id": 1,
+                "created_at": "2024-03-20T09:00:00Z",
+                "updated_at": "2024-03-20T09:00:00Z"
+            }
+        ]
+    }
+    ```
+
+    Error Responses:
+    1. Event not found:
+    ```json
+    {
+        "detail": "Event not found"
+    }
+    ```
+
+    2. Version not found:
+    ```json
+    {
+        "detail": "Version not found"
+    }
+    ```
+
+    3. Insufficient permissions:
+    ```json
+    {
+        "detail": "Not enough permissions"
+    }
+    ```
+
+    Notes:
+    - The user must have editor permission to rollback an event
+    - Rolling back creates a new version to track the change
+    - The rollback operation is reversible (you can rollback to a newer version)
+    - All event data from the target version is restored
+    """
+    event = crud_event.event.get(db=db, id=event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not crud_event.event.check_permission(
+        db=db, event_id=event_id, user_id=current_user.id, required_role=UserRole.EDITOR
+    ):
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    # Check if version exists
+    version = crud_event.event.get_version(db=db, event_id=event_id, version_number=version_id)
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+    
+    # Perform rollback
+    event = crud_event.event.rollback_to_version(
+        db=db,
+        event_id=event_id,
+        version_number=version_id,
+        user_id=current_user.id
+    )
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    return event 

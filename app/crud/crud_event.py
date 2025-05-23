@@ -347,5 +347,64 @@ class CRUDEvent(CRUDBase[Event, EventCreate, EventUpdate]):
             "failed": failed_events
         }
 
+    def rollback_to_version(
+        self, db: Session, *, event_id: int, version_number: int, user_id: int
+    ) -> Event:
+        """
+        Rollback an event to a specific version.
+        Creates a new version with the rolled back data.
+        """
+        # Get the event
+        event = self.get(db=db, id=event_id)
+        if not event:
+            return None
+
+        # Get the target version
+        target_version = self.get_version(db=db, event_id=event_id, version_number=version_number)
+        if not target_version:
+            return None
+
+        # Get the current version for comparison
+        current_version = (
+            db.query(EventVersion)
+            .filter(EventVersion.event_id == event_id)
+            .order_by(EventVersion.version_number.desc())
+            .first()
+        )
+
+        # Create a new version with the rolled back data
+        version_data = target_version.data
+        changed_fields = {}
+        if current_version:
+            # Calculate changed fields by comparing with current version
+            for key, value in version_data.items():
+                if key not in current_version.data or current_version.data[key] != value:
+                    changed_fields[key] = {
+                        "old": current_version.data.get(key),
+                        "new": value
+                    }
+
+        # Update the event with the rolled back data
+        for key, value in version_data.items():
+            setattr(event, key, value)
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+
+        # Create a new version record
+        new_version = EventVersion(
+            event_id=event_id,
+            version_number=(current_version.version_number + 1) if current_version else 1,
+            data=version_data,
+            created_by_id=user_id,
+            comment=f"Rolled back to version {version_number}",
+            change_type="rollback",
+            changed_fields=changed_fields
+        )
+        db.add(new_version)
+        db.commit()
+
+        return event
+
 
 event = CRUDEvent(Event) 
