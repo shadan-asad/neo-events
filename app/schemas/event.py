@@ -283,4 +283,22 @@ class EventList(BaseModel):
             data['end_time'] = data['end_time'].isoformat()
         if data.get('recurrence_pattern'):
             data['recurrence_pattern'] = self.recurrence_pattern.model_dump()
-        return data 
+        return data
+
+
+class EventBatchCreate(BaseModel):
+    events: List[EventCreate]
+
+    @field_validator('events')
+    @classmethod
+    def validate_events(cls, v: List[EventCreate]) -> List[EventCreate]:
+        if not v:
+            raise ValueError('At least one event must be provided')
+        if len(v) > 100:  # Limit batch size to prevent abuse
+            raise ValueError('Maximum 100 events can be created in a single batch')
+        return v
+
+
+class EventBatchResponse(BaseModel):
+    created: List[EventCreateResponse]
+    failed: List[Dict[str, Any]]  # List of events that failed to create with error messages 

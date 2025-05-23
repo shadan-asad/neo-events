@@ -15,7 +15,9 @@ from app.schemas.event import (
     EventDiff,
     EventCreateResponse,
     EventShareRequest,
-    EventList
+    EventList,
+    EventBatchCreate,
+    EventBatchResponse
 )
 from app.schemas.user import User
 
@@ -1109,4 +1111,124 @@ def get_version_diff(
         elif v1.data[key] != v2.data[key]:
             changes[key] = {"old": v1.data[key], "new": v2.data[key]}
     
-    return EventDiff(version1=version1, version2=version2, changes=changes) 
+    return EventDiff(version1=version1, version2=version2, changes=changes)
+
+
+@router.post("/batch", response_model=EventBatchResponse)
+def create_events_batch(
+    *,
+    db: Session = Depends(deps.get_db),
+    batch_in: EventBatchCreate,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Create multiple events in a single request.
+
+    Creates multiple events in a single request. Each event in the batch is validated and created independently.
+    The response includes both successfully created events and any events that failed to create with error messages.
+
+    Request Body Example:
+    ```json
+    {
+        "events": [
+            {
+                "title": "Team Meeting 1",
+                "description": "First team meeting",
+                "start_time": "2024-03-20T10:00:00Z",
+                "end_time": "2024-03-20T11:00:00Z",
+                "location": "Conference Room A",
+                "is_recurring": false
+            },
+            {
+                "title": "Team Meeting 2",
+                "description": "Second team meeting",
+                "start_time": "2024-03-21T10:00:00Z",
+                "end_time": "2024-03-21T11:00:00Z",
+                "location": "Conference Room B",
+                "is_recurring": true,
+                "recurrence_pattern": {
+                    "frequency": "weekly",
+                    "interval": 1,
+                    "days_of_week": [2, 4],
+                    "end_date": "2024-12-31T23:59:59Z"
+                }
+            }
+        ]
+    }
+    ```
+
+    Response Example:
+    ```json
+    {
+        "created": [
+            {
+                "id": 1,
+                "title": "Team Meeting 1",
+                "description": "First team meeting",
+                "start_time": "2024-03-20T10:00:00Z",
+                "end_time": "2024-03-20T11:00:00Z",
+                "location": "Conference Room A",
+                "is_recurring": false,
+                "owner_id": 1,
+                "created_at": "2024-03-20T09:00:00Z",
+                "updated_at": "2024-03-20T09:00:00Z",
+                "permissions": []
+            }
+        ],
+        "failed": [
+            {
+                "event": {
+                    "title": "Team Meeting 2",
+                    "description": "Second team meeting",
+                    "start_time": "2024-03-21T10:00:00Z",
+                    "end_time": "2024-03-21T11:00:00Z",
+                    "location": "Conference Room B",
+                    "is_recurring": true,
+                    "recurrence_pattern": {
+                        "frequency": "weekly",
+                        "interval": 1,
+                        "days_of_week": [2, 4],
+                        "end_date": "2024-12-31T23:59:59Z"
+                    }
+                },
+                "error": "Event conflicts with existing events"
+            }
+        ]
+    }
+    ```
+
+    Error Responses:
+    1. Empty events list:
+    ```json
+    {
+        "detail": "At least one event must be provided"
+    }
+    ```
+
+    2. Too many events:
+    ```json
+    {
+        "detail": "Maximum 100 events can be created in a single batch"
+    }
+    ```
+
+    3. Invalid event data:
+    ```json
+    {
+        "detail": "Validation error in event data"
+    }
+    ```
+
+    Notes:
+    - Maximum 100 events can be created in a single batch
+    - Each event is validated independently
+    - Events that fail validation or conflict with existing events are included in the "failed" list
+    - The same validation rules apply as for single event creation
+    - All datetime fields must be in ISO 8601 format with UTC timezone
+    """
+    result = crud_event.event.create_batch(
+        db=db,
+        events=batch_in.events,
+        owner_id=current_user.id
+    )
+    return result 

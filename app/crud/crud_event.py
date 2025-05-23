@@ -257,5 +257,55 @@ class CRUDEvent(CRUDBase[Event, EventCreate, EventUpdate]):
             .all()
         )
 
+    def create_batch(
+        self, db: Session, *, events: List[EventCreate], owner_id: int
+    ) -> Dict[str, List[Any]]:
+        """
+        Create multiple events in a single transaction.
+        Returns a dictionary with lists of successfully created events and failed events with error messages.
+        """
+        created_events = []
+        failed_events = []
+
+        for event in events:
+            try:
+                # Check for conflicts
+                conflicts = self.check_conflicts(
+                    db,
+                    event_id=0,  # New event
+                    start_time=event.start_time,
+                    end_time=event.end_time
+                )
+                if conflicts:
+                    failed_events.append({
+                        "event": event.model_dump(),
+                        "error": "Event conflicts with existing events"
+                    })
+                    continue
+
+                # Create the event
+                db_obj = self.create_with_owner(
+                    db=db,
+                    obj_in=event,
+                    owner_id=owner_id
+                )
+                created_events.append(db_obj)
+
+            except ValueError as e:
+                failed_events.append({
+                    "event": event.model_dump(),
+                    "error": str(e)
+                })
+            except Exception as e:
+                failed_events.append({
+                    "event": event.model_dump(),
+                    "error": f"Unexpected error: {str(e)}"
+                })
+
+        return {
+            "created": created_events,
+            "failed": failed_events
+        }
+
 
 event = CRUDEvent(Event) 
