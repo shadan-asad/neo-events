@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.crud import crud_event
-from app.db.models import UserRole
+from app.db.models import UserRole, User as DBUser
 from app.schemas.event import (
     Event,
     EventCreate,
@@ -13,7 +13,8 @@ from app.schemas.event import (
     EventPermissionCreate,
     EventVersion,
     EventDiff,
-    EventCreateResponse
+    EventCreateResponse,
+    EventShareRequest
 )
 from app.schemas.user import User
 
@@ -541,59 +542,59 @@ def delete_event(
     return {"msg": "Event deleted"}
 
 
-@router.post("/{event_id}/share", response_model=EventPermission)
+@router.post("/{event_id}/share", response_model=List[EventPermission])
 def share_event(
     *,
     db: Session = Depends(deps.get_db),
     event_id: int,
-    permission_in: EventPermissionCreate,
+    share_request: EventShareRequest,
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
-    Share event with another user.
+    Share event with multiple users.
 
-    Shares an event with another user by assigning them a role (owner, editor, or viewer).
+    Shares an event with multiple users by assigning them roles (owner, editor, or viewer).
     The current user must be the owner of the event.
 
     Path Parameters:
     - event_id: ID of the event to share
 
-    Request Body Examples:
-
-    1. Share with editor role:
+    Request Body Example:
     ```json
     {
-        "user_id": 2,
-        "role": "editor"
-    }
-    ```
-
-    2. Share with viewer role:
-    ```json
-    {
-        "user_id": 3,
-        "role": "viewer"
-    }
-    ```
-
-    3. Share with owner role:
-    ```json
-    {
-        "user_id": 4,
-        "role": "owner"
+        "users": [
+            {
+                "user_id": 2,
+                "role": "editor"
+            },
+            {
+                "user_id": 3,
+                "role": "viewer"
+            }
+        ]
     }
     ```
 
     Response Example:
     ```json
-    {
-        "id": 1,
-        "user_id": 2,
-        "role": "editor",
-        "event_id": 1,
-        "created_at": "2024-03-20T09:00:00Z",
-        "updated_at": "2024-03-20T09:00:00Z"
-    }
+    [
+        {
+            "id": 1,
+            "user_id": 2,
+            "role": "editor",
+            "event_id": 1,
+            "created_at": "2024-03-20T09:00:00Z",
+            "updated_at": "2024-03-20T09:00:00Z"
+        },
+        {
+            "id": 2,
+            "user_id": 3,
+            "role": "viewer",
+            "event_id": 1,
+            "created_at": "2024-03-20T09:00:00Z",
+            "updated_at": "2024-03-20T09:00:00Z"
+        }
+    ]
     ```
 
     Error Responses:
@@ -614,7 +615,7 @@ def share_event(
     3. Invalid role:
     ```json
     {
-        "detail": "Invalid role. Must be one of: owner, editor, viewer"
+        "detail": "Role must be one of: owner, editor, viewer"
     }
     ```
 
@@ -625,9 +626,25 @@ def share_event(
     }
     ```
 
+    5. Duplicate users:
+    ```json
+    {
+        "detail": "Duplicate user_ids are not allowed"
+    }
+    ```
+
+    6. Empty users list:
+    ```json
+    {
+        "detail": "At least one user must be provided"
+    }
+    ```
+
     Notes:
     - role must be one of: "owner", "editor", "viewer"
-    - The user being shared with must exist in the system
+    - The users being shared with must exist in the system
+    - Duplicate user_ids are not allowed
+    - At least one user must be provided
     """
     event = crud_event.event.get(db=db, id=event_id)
     if not event:
@@ -637,13 +654,34 @@ def share_event(
     ):
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
-    permission = crud_event.event.add_permission(
-        db=db,
-        event_id=event_id,
-        user_id=permission_in.user_id,
-        role=permission_in.role
-    )
-    return permission
+    # Add permissions for each user
+    permissions = []
+    for user_permission in share_request.users:
+        # Check if user exists
+        user = db.query(DBUser).filter(DBUser.id == user_permission.user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with id {user_permission.user_id} not found"
+            )
+        
+        # Convert the role string to lowercase and create the UserRole enum
+        role_str = user_permission.role.lower()
+        if role_str not in ["owner", "editor", "viewer"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Role must be one of: owner, editor, viewer"
+            )
+        role = UserRole(role_str)  # Create enum with lowercase value
+        permission = crud_event.event.add_permission(
+            db=db,
+            event_id=event_id,
+            user_id=user_permission.user_id,
+            role=role  # Pass the enum object
+        )
+        permissions.append(permission)
+    
+    return permissions
 
 
 @router.get("/{event_id}/permissions", response_model=List[EventPermission])

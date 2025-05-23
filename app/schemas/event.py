@@ -118,7 +118,14 @@ class EventUpdate(EventBase):
 
 class EventPermissionBase(BaseModel):
     user_id: int
-    role: str
+    role: Literal["owner", "editor", "viewer"]
+
+    @field_validator('role')
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        if v not in ["owner", "editor", "viewer"]:
+            raise ValueError('Role must be one of: owner, editor, viewer')
+        return v
 
 
 class EventPermissionCreate(EventPermissionBase):
@@ -133,6 +140,23 @@ class EventPermission(EventPermissionBase):
 
     class Config:
         from_attributes = True
+
+
+class EventShareRequest(BaseModel):
+    users: List[EventPermissionCreate]
+
+    @field_validator('users')
+    @classmethod
+    def validate_users(cls, v: List[EventPermissionCreate]) -> List[EventPermissionCreate]:
+        if not v:
+            raise ValueError('At least one user must be provided')
+        
+        # Check for duplicate user_ids
+        user_ids = [user.user_id for user in v]
+        if len(user_ids) != len(set(user_ids)):
+            raise ValueError('Duplicate user_ids are not allowed')
+        
+        return v
 
 
 class EventVersionBase(BaseModel):

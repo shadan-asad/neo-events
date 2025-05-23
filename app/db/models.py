@@ -12,6 +12,18 @@ class UserRole(str, enum.Enum):
     EDITOR = "editor"
     VIEWER = "viewer"
 
+    def __str__(self):
+        return self.value
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            value = value.lower()
+            for member in cls:
+                if member.value == value:
+                    return member
+        return None
+
 
 class EventPermission(Base):
     __tablename__ = "event_permissions"
@@ -19,9 +31,9 @@ class EventPermission(Base):
     id = Column(Integer, primary_key=True, index=True)
     event_id = Column(Integer, ForeignKey("events.id", ondelete="CASCADE"))
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
-    role = Column(Enum(UserRole))
+    role = Column(Enum(UserRole, name="userrole", create_type=False, values_callable=lambda obj: [e.value for e in obj]))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     event = relationship("Event", back_populates="permissions")
     user = relationship("User", back_populates="event_permissions")

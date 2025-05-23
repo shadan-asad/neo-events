@@ -142,10 +142,11 @@ class CRUDEvent(CRUDBase[Event, EventCreate, EventUpdate]):
     def add_permission(
         self, db: Session, *, event_id: int, user_id: int, role: UserRole
     ) -> EventPermission:
+        # Create permission with the enum value
         permission = EventPermission(
             event_id=event_id,
             user_id=user_id,
-            role=role
+            role=role  # Pass the enum object
         )
         db.add(permission)
         db.commit()
