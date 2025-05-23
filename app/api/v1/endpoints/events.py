@@ -277,7 +277,7 @@ def read_events(
     return events
 
 
-@router.get("/{event_id}", response_model=Event)
+@router.get("/{event_id}", response_model=EventList)
 def read_event(
     *,
     db: Session = Depends(deps.get_db),
@@ -288,6 +288,7 @@ def read_event(
     Get event by ID.
 
     Returns the details of a specific event if the current user has at least viewer permission.
+    The response excludes version history.
 
     Path Parameters:
     - event_id: ID of the event to retrieve
@@ -331,6 +332,12 @@ def read_event(
     {
         "detail": "Not enough permissions"
     }
+    ```
+
+    Notes:
+    - The response does not include version history
+    - All datetime fields are returned in ISO 8601 format with UTC timezone
+    - Only events that the user has permission to view are included
     """
     event = crud_event.event.get(db=db, id=event_id)
     if not event:
