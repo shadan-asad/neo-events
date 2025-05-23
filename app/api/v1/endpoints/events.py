@@ -18,7 +18,8 @@ from app.schemas.event import (
     EventShareRequest,
     EventList,
     EventBatchCreate,
-    EventBatchResponse
+    EventBatchResponse,
+    EventChangelogEntry
 )
 from app.schemas.user import User
 
@@ -1436,3 +1437,116 @@ def rollback_event(
         raise HTTPException(status_code=404, detail="Event not found")
     
     return event 
+
+
+@router.get("/{event_id}/changelog", response_model=List[EventChangelogEntry])
+def get_event_changelog(
+    *,
+    db: Session = Depends(deps.get_db),
+    event_id: int,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Get event changelog.
+
+    Returns a chronological log of all changes made to an event.
+    The current user must have at least viewer permission.
+
+    Path Parameters:
+    - event_id: ID of the event to get changelog for
+
+    Response Example:
+    ```json
+    [
+        {
+            "version_number": 1,
+            "timestamp": "2024-03-20T09:00:00Z",
+            "user_id": 1,
+            "change_type": "create",
+            "comment": "Initial version",
+            "changes": {
+                "all": ["title", "description", "start_time", "end_time", "location"]
+            }
+        },
+        {
+            "version_number": 2,
+            "timestamp": "2024-03-20T10:00:00Z",
+            "user_id": 1,
+            "change_type": "update",
+            "comment": "Updated event details",
+            "changes": {
+                "title": {
+                    "old": "Original Title",
+                    "new": "Updated Title"
+                },
+                "description": {
+                    "old": "Original description",
+                    "new": "Updated description"
+                }
+            }
+        },
+        {
+            "version_number": 3,
+            "timestamp": "2024-03-20T11:00:00Z",
+            "user_id": 2,
+            "change_type": "rollback",
+            "comment": "Rolled back to version 1",
+            "changes": {
+                "title": {
+                    "old": "Updated Title",
+                    "new": "Original Title"
+                },
+                "description": {
+                    "old": "Updated description",
+                    "new": "Original description"
+                }
+            }
+        }
+    ]
+    ```
+
+    Error Responses:
+    1. Event not found:
+    ```json
+    {
+        "detail": "Event not found"
+    }
+    ```
+
+    2. Insufficient permissions:
+    ```json
+    {
+        "detail": "Not enough permissions"
+    }
+    ```
+
+    Notes:
+    - The changelog is ordered chronologically by timestamp
+    - Each entry includes the version number, timestamp, user who made the change, and details of what changed
+    - Change types include: "create", "update", "rollback"
+    - For creation events, all fields are listed in the changes
+    - For updates and rollbacks, only the changed fields are included
+    - All timestamps are in ISO 8601 format with UTC timezone
+    """
+    event = crud_event.event.get(db=db, id=event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not crud_event.event.check_permission(
+        db=db, event_id=event_id, user_id=current_user.id, required_role=UserRole.VIEWER
+    ):
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    versions = crud_event.event.get_versions(db=db, event_id=event_id)
+    changelog = []
+    
+    for version in versions:
+        changelog.append(EventChangelogEntry(
+            version_number=version.version_number,
+            timestamp=version.created_at,
+            user_id=version.created_by_id,
+            change_type=version.change_type,
+            comment=version.comment,
+            changes=version.changed_fields
+        ))
+    
+    return changelog 

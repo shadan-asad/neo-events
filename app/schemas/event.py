@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, List, Dict, Any, Literal, Union
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field, field_validator, model_validator
 import json
@@ -313,3 +313,15 @@ class EventBatchCreate(BaseModel):
 class EventBatchResponse(BaseModel):
     created: List[EventCreateResponse]
     failed: List[Dict[str, Any]]  # List of events that failed to create with error messages 
+
+
+class EventChangelogEntry(BaseModel):
+    version_number: int
+    timestamp: datetime
+    user_id: int
+    change_type: str
+    comment: Optional[str] = None
+    changes: Optional[Dict[str, Union[Dict[str, Any], List[str]]]] = None
+
+    class Config:
+        from_attributes = True 
